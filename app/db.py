@@ -29,3 +29,20 @@ class Db:
 
     def fail(self, photo_id: str, error: str) -> None:
         self._rpc("fail_photo_processing", {"p_photo_id": photo_id, "p_error": error})
+
+    # ---- faces
+
+    def claim_faces(self, limit: int) -> list[dict]:
+        return self._rpc("claim_photos_for_faces", {"p_limit": limit}) or []
+
+    def save_faces(self, photo_id: str, model: str, faces: list[dict]) -> int:
+        return int(self._rpc("save_photo_faces", {"p_photo_id": photo_id, "p_model": model, "p_faces": faces}) or 0)
+
+    def fail_faces(self, photo_id: str, error: str) -> None:
+        self._rpc("fail_photo_faces", {"p_photo_id": photo_id, "p_error": error})
+
+    def search(self, event_id: str, embedding: str, threshold: float, limit: int) -> list[dict]:
+        """Raises httpx.HTTPStatusError; a disabled event comes back as message 'search_disabled'."""
+        return self._rpc("search_event_faces", {
+            "p_event_id": event_id, "p_embedding": embedding, "p_threshold": threshold, "p_limit": limit,
+        }) or []
