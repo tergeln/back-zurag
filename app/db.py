@@ -41,6 +41,20 @@ class Db:
     def fail_faces(self, photo_id: str, error: str) -> None:
         self._rpc("fail_photo_faces", {"p_photo_id": photo_id, "p_error": error})
 
+    # ---- maintenance
+
+    def mark_abandoned_uploads(self) -> int:
+        return int(self._rpc("mark_abandoned_uploads", {}) or 0)
+
+    def expire_face_data(self) -> int:
+        return int(self._rpc("expire_face_data", {}) or 0)
+
+    def deletable_photo_files(self, limit: int) -> list[dict]:
+        return self._rpc("list_deletable_photo_files", {"p_limit": limit}) or []
+
+    def mark_photo_files_deleted(self, photo_ids: list[str]) -> int:
+        return int(self._rpc("mark_photo_files_deleted", {"p_photo_ids": photo_ids}) or 0)
+
     def search(self, event_id: str, embedding: str, threshold: float, limit: int) -> list[dict]:
         """Raises httpx.HTTPStatusError; a disabled event comes back as message 'search_disabled'."""
         return self._rpc("search_event_faces", {

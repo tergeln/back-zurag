@@ -21,5 +21,10 @@ class Storage:
     def get(self, key: str) -> bytes:
         return self.client.get_object(Bucket=self.bucket, Key=key)["Body"].read()
 
+    def delete_many(self, keys: list[str]) -> None:
+        for i in range(0, len(keys), 1000):  # S3 delete_objects takes up to 1000 keys
+            batch = [{"Key": k} for k in keys[i:i + 1000]]
+            self.client.delete_objects(Bucket=self.bucket, Delete={"Objects": batch, "Quiet": True})
+
     def put(self, key: str, data: bytes, content_type: str) -> None:
         self.client.put_object(Bucket=self.bucket, Key=key, Body=data, ContentType=content_type, CacheControl="private, max-age=31536000, immutable")

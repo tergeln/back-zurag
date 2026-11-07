@@ -22,6 +22,7 @@ from .config import load_settings
 from .db import Db
 from .faces import MODEL_NAME, FaceEngine, load_bgr, to_pgvector
 from .imaging import InvalidImage, render
+from .maintenance import run_maintenance
 from .storage import Storage
 
 log = logging.getLogger("worker")
@@ -76,13 +77,24 @@ def faces_one(job: dict, storage: Storage, db: Db) -> int:
     return index_faces(job["id"], original, db)
 
 
+MAINTENANCE_EVERY = 3600  # seconds
+
+
 def run(once: bool) -> None:
     settings = load_settings()
     storage, db = Storage(settings), Db(settings)
     done = failed = indexed = faces_found = 0
     started = time.monotonic()
+    last_maintenance = 0.0
     with ThreadPoolExecutor(THREADS) as pool:
         while True:
+            if not once and time.monotonic() - last_maintenance > MAINTENANCE_EVERY:
+                try:
+                    run_maintenance(storage, db)
+                except Exception:
+                    log.exception("maintenance failed")
+                last_maintenance = time.monotonic()
+
             jobs = db.claim(BATCH)
             if jobs:
                 for ok in pool.map(lambda j: process_one(j, storage, db), jobs):
@@ -111,4 +123,10 @@ if __name__ == "__main__":
     logging.getLogger("httpx").setLevel(logging.WARNING)  # one line per request is too noisy
     parser = argparse.ArgumentParser()
     parser.add_argument("--once", action="store_true", help="process the queues once and exit")
-    run(parser.parse_args().once)
+    parser.add_argument("--maintenance", action="store_true", help="run the cleanup jobs once and exit")
+    args = parser.parse_args()
+    if args.maintenance:
+        s = load_settings()
+        run_maintenance(Storage(s), Db(s))
+    else:
+        run(args.once)
