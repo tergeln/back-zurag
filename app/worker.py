@@ -86,6 +86,7 @@ def run(once: bool) -> None:
     done = failed = indexed = faces_found = 0
     started = time.monotonic()
     last_maintenance = 0.0
+    outage = 0  # consecutive failed attempts to reach the database
     with ThreadPoolExecutor(THREADS) as pool:
         while True:
             if not once and time.monotonic() - last_maintenance > MAINTENANCE_EVERY:
@@ -95,7 +96,21 @@ def run(once: bool) -> None:
                     log.exception("maintenance failed")
                 last_maintenance = time.monotonic()
 
-            jobs = db.claim(BATCH)
+            # Asking for work needs the network. A short outage (Wi-Fi drop, DNS
+            # failure) must not stop the worker: wait, longer each time, and retry.
+            try:
+                jobs = db.claim(BATCH)
+                face_jobs = [] if jobs else db.claim_faces(BATCH)
+                outage = 0
+            except Exception as e:
+                if once:
+                    raise
+                outage += 1
+                wait = min(60, IDLE_SLEEP * 2 ** min(outage, 6))
+                log.warning("cannot reach the database (%s); retrying in %ds", type(e).__name__, wait)
+                time.sleep(wait)
+                continue
+
             if jobs:
                 for ok in pool.map(lambda j: process_one(j, storage, db), jobs):
                     done += ok
@@ -103,7 +118,6 @@ def run(once: bool) -> None:
                 log.info("processed %d, failed %d (%.0fs)", done, failed, time.monotonic() - started)
                 continue
 
-            face_jobs = db.claim_faces(BATCH)
             if face_jobs:
                 for n in pool.map(lambda j: faces_one(j, storage, db), face_jobs):
                     indexed += 1
